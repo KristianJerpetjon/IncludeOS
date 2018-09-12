@@ -1,4 +1,4 @@
-// This file is a part of the IncludeOS unikernel - www.includeos.org
+﻿// This file is a part of the IncludeOS unikernel - www.includeos.org
 //
 // Copyright 2015-2016 Oslo and Akershus University College of Applied Sciences
 // and Alfred Bratterud
@@ -79,6 +79,7 @@ public:
 
   id_t get_id() const noexcept { return id_; }
 
+  virtual bool is_pipe() { return false; }
   virtual bool is_file() { return false; }
   virtual bool is_socket() { return false; }
 
