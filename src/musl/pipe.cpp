@@ -18,9 +18,12 @@ static long sys_pipe2([[maybe_unused]]int pipefd[2], [[maybe_unused]]int flags)
 {
   if (sys_pipe(pipefd) == 0)
   {
-    //get fd from fd_map (inneficient..)
- //   if(auto* fildes = FD_map::_get(pipefd[0]); fildes)
- //     return fildes->fcntl(F_SETFD,flags);
+    //TODO
+     /*
+    if ((fcntl(pipefd[0],F_SETFL,flags) != 0) || (fcntl(pipefd[1],F_SETFL,flags) != 0))
+    {
+      return -EFAULT;
+    }*/
   }
   return -ENOSYS;
 }

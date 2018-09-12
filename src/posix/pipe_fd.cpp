@@ -1,8 +1,14 @@
 ﻿#include <posix/pipe_fd.hpp>
+#include <kernel/fiber.hpp>
 
 ssize_t PipeBuffer::read(char *dst,ssize_t length,bool blocking)
 {
 
+  if (!writeOpen)
+  {
+      //end of file.. as write end is closed.. should we have flushed the buffer out first.. or is this UNDEF
+      return 0;
+  }
   if (!blocking)
   {
     if (R.empty())
@@ -10,8 +16,11 @@ ssize_t PipeBuffer::read(char *dst,ssize_t length,bool blocking)
     return R.read(dst,length);
   }
 
-
-  while(R.empty()); //busy wait for data.. this is not nice
+  while(R.empty())
+  {
+      //is this correct ?
+      //Fiber::yield();
+  }
 
   ssize_t res=R.read(dst,length);
   if (res < 0) //or throw
@@ -26,8 +35,8 @@ ssize_t PipeBuffer::write(const char *src,ssize_t length,bool blocking)
     ssize_t size=0;
     if (!readOpen)
     {
-        printf("stderr read end not open\n");
-        //Singal Sigpipe if ignored raise EPIPE
+        perror("read end not open\n");
+        //Singal Sigpipe if ignored rastderise EPIPE
         return -EPIPE;
     }
     if (!blocking)
@@ -40,9 +49,12 @@ ssize_t PipeBuffer::write(const char *src,ssize_t length,bool blocking)
     {
         while (length > 0)
         {
-            printf("writing to file\n");
+            while(R.free_space() == 0)
+            {
+                //is this correct
+                //Fiber::yield();
+            }
             int res=R.write(&src[size],length);
-            printf("Wrote %d bytes to file\n",res);
             if (res < 0) //or throw
             {
                 return -EFAULT;
