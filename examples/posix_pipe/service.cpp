@@ -19,6 +19,8 @@
 #include <cstdio>
 #include <isotime>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 void Service::start(const std::string& args)
 {
@@ -29,7 +31,7 @@ void Service::start(const std::string& args)
   
   char buff_in[256];
   char buff_out[256];
-  snprintf(buff_in,256,"Hello IncludeOS Pipe\n");
+  snprintf(buff_in,256,"Hello IncludeOS demo Pipe\n");
 
   int pipefd[2];
   if (pipe(pipefd) != 0)
@@ -55,7 +57,23 @@ void Service::start(const std::string& args)
   printf("closing read end as eof is received from write end\n");
   close(pipefd[0]); //should release the underlaying buffer but the use of ptr type in map..
 
-    
+  if (pipe2(pipefd,O_NONBLOCK) != 0)
+  {
+	  printf("Pipe2 failed\n");
+  }
+
+  if ( read(pipefd[0],buff_out,1) < 0)
+  {
+    printf("error %s\n",strerror(errno));
+  }
+
+  write(pipefd[1],buff_in,strlen(buff_in)+1);
+
+  res=read(pipefd[0],buff_out,256);
+  printf("read %d bytes from pipe\n",res);
+  printf("Received from pipe nonblock: \n\t %s\n",buff_out);
+
+
 
 /*  struct timespec ts;
   ts.tv_nsec=2000;

@@ -46,6 +46,7 @@ public:
   virtual int     close() = 0;
   virtual int     fcntl(int, va_list);
   virtual int     ioctl(int, void*);
+  void            fsetf(int flags) { fflags = flags; }
 
   /** SOCKET **/
   virtual long    accept(struct sockaddr *__restrict__, socklen_t *__restrict__) { return -ENOTSOCK; }
@@ -87,7 +88,7 @@ public:
   bool operator!=(const FD& fd) const noexcept { return !(*this == fd); }
 
   bool is_blocking() const noexcept {
-    return this->non_blocking == 0;
+    return ((this->fflags&O_NONBLOCK) == 0);
   }
 
   virtual ~FD() {}

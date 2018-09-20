@@ -20,8 +20,8 @@ public:
 
 private:
   FixedRingBuffer<65535> R;
-  bool writeOpen;
-  bool readOpen;
+  bool writeOpen=false;
+  bool readOpen=false;
 };
 
 

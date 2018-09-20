@@ -16,16 +16,16 @@ static long sys_pipe([[maybe_unused]]int pipefd[2])
 
 static long sys_pipe2([[maybe_unused]]int pipefd[2], [[maybe_unused]]int flags)
 {
+  printf("Pipe2\n");
   if (sys_pipe(pipefd) == 0)
   {
-    //TODO
-     /*
-    if ((fcntl(pipefd[0],F_SETFL,flags) != 0) || (fcntl(pipefd[1],F_SETFL,flags) != 0))
-    {
-      return -EFAULT;
-    }*/
+      auto rdfdes = FD_map::_get(pipefd[0]);
+      rdfdes->fsetf(flags);
+      auto wrfdes = FD_map::_get(pipefd[1]);
+      wrfdes->fsetf(flags);
+      return 0;
   }
-  return -ENOSYS;
+  return -EFAULT;
 }
 
 extern "C" {

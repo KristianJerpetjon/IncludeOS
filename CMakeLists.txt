@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.0)
+﻿cmake_minimum_required(VERSION 3.1.0)
 
 set(INCLUDEOS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/)
 
