@@ -1,0 +1,28 @@
+﻿set(SRCS
+    multiboot.cpp
+    syscalls.cpp
+    os.cpp
+    cpuid.cpp
+    block.cpp
+    events.cpp
+    memmap.cpp
+    pci_manager.cpp
+    heap.cpp
+    service_stub.cpp
+    elf.cpp
+    vga.cpp
+    context.cpp
+    context_asm.asm
+    fiber.cpp
+    tls.cpp
+    profile.cpp
+    scoped_profiler.cpp
+    terminal.cpp
+    timers.cpp
+    rtc.cpp
+    rng.cpp
+    system_log.cpp
+    rdrand.cpp
+    solo5_manager.cpp
+    )
+add_library(kernel OBJECT ${SRCS})
