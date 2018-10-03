@@ -1,4 +1,4 @@
-// This file is a part of the IncludeOS unikernel - www.includeos.org
+﻿// This file is a part of the IncludeOS unikernel - www.includeos.org
 //
 // Copyright 2015 Oslo and Akershus University College of Applied Sciences
 // and Alfred Bratterud
@@ -32,7 +32,8 @@ public:
   static const int DRIVER_OFFSET = 2;
   static const int NUM_RX_QUEUES = 1;
   static const int NUM_TX_DESC   = 128;
-  static const int NUM_RX_DESC   = 512;
+  static const int NUM_RX_DESC1   = 1024;
+  static const int NUM_RX_DESC2   = 256;
 
   static std::unique_ptr<Nic> new_instance(hw::PCI_Device& d, const uint16_t MTU)
   { return std::make_unique<vmxnet3>(d, MTU); }
@@ -104,16 +105,53 @@ private:
     uint32_t consumers  = 0;
     uint32_t flushvalue = 0;
   };
+
+
+
+  /*
+  template<class Type,int alignement>
+  class dma_ring
+  {
+  public:
+      vmxnet3_dma_ring(uint16_t _rid,uint16_t _capacity) { }
+      vmxnet3_rx_desc &get_descriptor(uint16_t idx);
+
+  private:
+      int rid;
+      u32
+      u8 gen=0;
+      std::unique_ptr<vmxnet3_rx_desc> desc;
+    //  vmxnet3_rx_desc *desc;
+  }
+*/
   struct rxring_state {
-    uint8_t* buffers[NUM_RX_DESC];
+ //   std::vector<struct vmxnet3_rx_desc *> unallocated;
+ //   uint8_t* buffers[NUM_RX_DESC1 + NUM_RX_DESC2];
+   // std::vector<std::pair<int,int>
+
     vmxnet3_rx_desc* desc0 = nullptr;
     vmxnet3_rx_desc* desc1 = nullptr;
     vmxnet3_rx_comp* comp  = nullptr;
+    uint32_t desc0_size = NUM_RX_DESC1;
+    uint32_t desc1_size = NUM_RX_DESC2;
     int index = 0;
+    uint32_t ring0_consumers=0;
+    uint32_t ring1_consumers=0;
+    uint32_t ring0_unallocated=NUM_RX_DESC1;
+    uint32_t ring1_unallocated=NUM_RX_DESC2;
+    uint32_t ring0_producers=0;
+    uint32_t ring1_producers=0;
+    uint8_t ring0_gen=1;
+    uint8_t ring1_gen=1;
+    uint16_t id0;
+    uint16_t id1;
     uint32_t producers  = 0;
     uint32_t prod_count = 0;
     uint32_t consumers  = 0;
+    uint8_t comp_gen=1;
+    uint32_t comp_size=NUM_RX_DESC1+NUM_RX_DESC2;
   };
+
   void refill(rxring_state&);
 
   bool     check_version();

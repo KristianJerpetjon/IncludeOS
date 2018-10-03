@@ -35,9 +35,9 @@ static std::vector<vmxnet3*> deferred_devs;
 #define VMXNET3_IMM_ACTIVE 1
 
 #define VMXNET3_NUM_TX_COMP  vmxnet3::NUM_TX_DESC
-#define VMXNET3_NUM_RX_COMP  vmxnet3::NUM_RX_DESC
+#define VMXNET3_NUM_RX_COMP  (vmxnet3::NUM_RX_DESC1 + vmxnet3::NUM_RX_DESC2)
 static const int VMXNET3_TX_FILL = vmxnet3::NUM_TX_DESC-1;
-static const int VMXNET3_RX_FILL = vmxnet3::NUM_RX_DESC;
+static const int VMXNET3_RX_FILL = (vmxnet3::NUM_RX_DESC1+vmxnet3::NUM_RX_DESC2);
 
 /**
  * DMA areas
@@ -51,7 +51,8 @@ struct vmxnet3_dma {
   struct vmxnet3_tx_comp tx_comp[VMXNET3_NUM_TX_COMP];
   /** RX ring */
   struct vmxnet3_rx {
-    struct vmxnet3_rx_desc desc[vmxnet3::NUM_RX_DESC];
+    struct vmxnet3_rx_desc desc1[vmxnet3::NUM_RX_DESC1];
+    struct vmxnet3_rx_desc desc2[vmxnet3::NUM_RX_DESC2];
     struct vmxnet3_rx_comp comp[VMXNET3_NUM_RX_COMP];
   };
   struct vmxnet3_rx rx[vmxnet3::NUM_RX_QUEUES];
@@ -210,9 +211,9 @@ vmxnet3::vmxnet3(hw::PCI_Device& d, const uint16_t mtu) :
   // setup rx queues
   for (int q = 0; q < NUM_RX_QUEUES; q++)
   {
-    memset(rx[q].buffers, 0, sizeof(rx[q].buffers));
-    rx[q].desc0 = &dma->rx[q].desc[0];
-    rx[q].desc1 = &dma->rx[q].desc[0];
+  //  memset(rx[q].buffers, 0, sizeof(rx[q].buffers));
+    rx[q].desc0 = &dma->rx[q].desc1[0];
+    rx[q].desc1 = &dma->rx[q].desc2[0];
     rx[q].comp  = &dma->rx[q].comp[0];
     rx[q].index = q;
 
@@ -220,11 +221,10 @@ vmxnet3::vmxnet3(hw::PCI_Device& d, const uint16_t mtu) :
     queue.cfg.desc_address[0] = (uintptr_t) rx[q].desc0;
     queue.cfg.desc_address[1] = (uintptr_t) rx[q].desc1;
     queue.cfg.comp_address    = (uintptr_t) rx[q].comp;
-    queue.cfg.num_desc[0]  = vmxnet3::NUM_RX_DESC;
-    queue.cfg.num_desc[1]  = vmxnet3::NUM_RX_DESC;
-    queue.cfg.num_comp     = VMXNET3_NUM_RX_COMP;
-    queue.cfg.driver_data_len = sizeof(vmxnet3_rx_desc)
-                          + 2 * sizeof(vmxnet3_rx_desc);
+    queue.cfg.num_desc[0]  = vmxnet3::NUM_RX_DESC1;
+    queue.cfg.num_desc[1]  = vmxnet3::NUM_RX_DESC2;
+    queue.cfg.num_comp     = vmxnet3::NUM_RX_DESC1 + vmxnet3::NUM_RX_DESC2;
+    queue.cfg.driver_data_len = sizeof(vmxnet3_rx_desc)*(vmxnet3::NUM_RX_DESC1 + vmxnet3::NUM_RX_DESC2);
     queue.cfg.intr_index = 2 + q;
   }
 
@@ -267,6 +267,10 @@ vmxnet3::vmxnet3(hw::PCI_Device& d, const uint16_t mtu) :
   // initialize and fill RX queue...
   for (int q = 0; q < NUM_RX_QUEUES; q++)
   {
+    memset(&rx[q].desc0[0],0,sizeof(vmxnet3_rx_desc)*rx[q].desc0_size);
+    memset(&rx[q].desc1[0],0,sizeof(vmxnet3_rx_desc)*rx[q].desc1_size);
+    rx[q].id0=q;
+    rx[q].id1=q+NUM_RX_QUEUES;
     refill(rx[q]);
   }
 
@@ -355,39 +359,92 @@ void vmxnet3::disable_intr(uint8_t idx) noexcept
 #define VMXNET3_RXCF_GEN 0x80000000UL
 #define VMXNET3_TXF_GEN  0x00004000UL
 
+
 void vmxnet3::refill(rxring_state& rxq)
 {
-  bool added_buffers = (rxq.prod_count < VMXNET3_RX_FILL);
-  while (rxq.prod_count < VMXNET3_RX_FILL)
-  {
-    // break when not allowed to refill anymore
-    if (rxq.prod_count > 0 /* prevent full stop? */
-     && not Nic::buffers_still_available(bufstore().buffers_in_use()))
+   // printf("Refill idx1=%d idx2=%d\n",rxq.ring0_producers,rxq.ring1_producers);
+    //this is the lazy way of doing it .. vector of released descriptors would be more efficient
+    auto prod0=rxq.ring0_producers;
+    auto prod1=rxq.ring1_producers;
+
+    bool flipped1=false;
+    bool flipped2=false;
+    while (rxq.ring0_unallocated)
     {
-      stat_rx_refill_dropped += VMXNET3_RX_FILL - rxq.prod_count;
-      break;
+        // break when not allowed to refill anymore
+        if (rxq.prod_count > 0
+         && not Nic::buffers_still_available(bufstore().buffers_in_use()))
+        {
+          printf("Out of buffers\n");
+          stat_rx_refill_dropped += VMXNET3_RX_FILL - rxq.prod_count;
+          break;
+        }
+        auto i = rxq.ring0_producers;
+        if (rxq.desc0[i].address == 0)
+        {
+            //TODO check that we actually get a packet..
+            auto* pkt_data = bufstore().get_buffer();
+            rxq.desc0[i].address=(uintptr_t) &pkt_data[sizeof(net::Packet) + DRIVER_OFFSET];
+            rxq.desc0[i].flags=(max_packet_len()&0x7FFF);
+            if (rxq.ring0_gen)
+                rxq.desc0[i].flags |= VMXNET3_RXF_GEN;
+
+            rxq.ring0_unallocated--;
+
+            rxq.ring0_producers++;
+            if (UNLIKELY(rxq.ring0_producers == rxq.desc0_size))
+            {
+        //        printf("flipping generation on ring0 \n");
+                rxq.ring0_gen=rxq.ring0_gen^1;
+                rxq.ring0_producers=0;
+               // flipped1=true;
+                break;
+            }
+            //rxq.producers++;
+            //rxq.prod_count++;
+        }
+    }
+    //for (auto i = 0 ; i < rxq.desc1_size;i++)
+    while(rxq.ring1_unallocated)
+    {
+        // break when not allowed to refill anymore
+        if (rxq.prod_count > 0
+         && not Nic::buffers_still_available(bufstore().buffers_in_use()))
+        {
+          printf("Out of buffers\n");
+          stat_rx_refill_dropped += VMXNET3_RX_FILL - rxq.prod_count;
+          break;
+        }
+        auto i = rxq.ring1_producers;
+         //TODO check that we actually get a packet..
+        auto* pkt_data = bufstore().get_buffer();
+        rxq.desc1[i].address=(uintptr_t) &pkt_data[sizeof(net::Packet) + DRIVER_OFFSET];
+        rxq.desc1[i].flags=(max_packet_len()&0x7FFF);
+        if (rxq.ring1_gen)
+            rxq.desc1[i].flags |= VMXNET3_RXF_GEN;
+        rxq.ring1_unallocated--;
+        rxq.ring1_producers++;
+        if (UNLIKELY(rxq.ring1_producers == rxq.desc1_size))
+        {
+
+         //   printf("flipping generation on ring1 \n");
+            rxq.ring1_gen=rxq.ring1_gen^1;
+            rxq.ring1_producers=0;
+            break;
+        }
     }
 
-    size_t i = rxq.producers % vmxnet3::NUM_RX_DESC;
-    const uint32_t generation =
-        (rxq.producers & vmxnet3::NUM_RX_DESC) ? 0 : VMXNET3_RXF_GEN;
+    if (prod0 != rxq.ring0_producers)
+    {
+        mmio_write32(this->ptbase + VMXNET3_PT_RXPROD1 + rxq.id0*8,
+                     rxq.ring0_producers);
+    }
 
-    // get a pointer to packet data
-    auto* pkt_data = bufstore().get_buffer();
-    rxq.buffers[i] = &pkt_data[sizeof(net::Packet) + DRIVER_OFFSET];
-
-    // assign rx descriptor
-    auto& desc = rxq.desc0[i];
-    desc.address = (uintptr_t) rxq.buffers[i];
-    desc.flags   = max_packet_len() | generation;
-    rxq.prod_count++;
-    rxq.producers++;
-  }
-  if (added_buffers) {
-    // send count to NIC
-    mmio_write32(this->ptbase + VMXNET3_PT_RXPROD1 + 0x200 * rxq.index,
-                 rxq.producers % vmxnet3::NUM_RX_DESC);
-  }
+    if (prod1 != rxq.ring1_producers)
+    {
+        mmio_write32(this->ptbase + VMXNET3_PT_RXPROD2 + rxq.id1*8,
+                     rxq.ring1_producers);
+    }
 }
 
 net::Packet_ptr
@@ -460,6 +517,7 @@ void vmxnet3::msix_recv_handler()
 
 bool vmxnet3::transmit_handler()
 {
+//  printf("Transmit\n");
   bool transmitted = false;
   while (true)
   {
@@ -494,36 +552,118 @@ bool vmxnet3::transmit_handler()
   }
   return transmitted;
 }
+
 bool vmxnet3::receive_handler(const int Q)
 {
   std::vector<net::Packet_ptr> recvq;
   this->disable_intr(2 + Q);
-  while (true)
+
+  VmxNet3_RxComp *cmp=static_cast<VmxNet3_RxComp*>(&dma->rx[Q].comp[rx[Q].consumers % VMXNET3_NUM_RX_COMP]);
+  while (rx[Q].comp_gen == cmp->gen())
   {
-    uint32_t idx = rx[Q].consumers % VMXNET3_NUM_RX_COMP;
-    uint32_t gen = (rx[Q].consumers & VMXNET3_NUM_RX_COMP) ? 0 : VMXNET3_RXCF_GEN;
+      //make sure we block any premature reading beyond gen
+    __asm volatile("lfence" ::: "memory");
+    //  __sw_barrier();
+ //   printf("start receiving something\n");
+  //  uint32_t comp_idx = rx[Q].consumers % VMXNET3_NUM_RX_COMP;
+    //uint32_t gen = (rx[Q].consumers & VMXNET3_NUM_RX_COMP) ? 0 : VMXNET3_RXCF_GEN;
+    //printf("comp idx %d\n",comp_idx);
+   // auto& comp = dma->rx[Q].comp[comp_idx];
 
-    auto& comp = dma->rx[Q].comp[idx];
-    // break when exiting this generation
-    if (gen != (comp.flags & VMXNET3_RXCF_GEN)) break;
-    rx[Q].consumers++;
-    rx[Q].prod_count--;
+    //cmp=static_cast<VmxNet3_RxComp*>(&dma->rx[Q].comp[comp_idx]);
 
-    int desc = comp.index % vmxnet3::NUM_RX_DESC;
-    // mask out length
-    int len = comp.len & (VMXNET3_MAX_BUFFER_LEN-1);
+    //dangerous .. read ahead issues ?
+  /*  if (cmp->length() == 0)
+    {
+        printf("zero length packet len=%08x,index=%08x,flags=%08x\n",comp.len,comp.index,comp.flags);
+        break;
+    }*/
+
+    //printf("rx_idx %d rx_rq_id=%d\n",cmp->idx(),cmp->qid());
+    //update CMP to next buffer
+
+  //  BUG_ON(rcd->rqID != rq->qid && rcd->rqID != rq->qid2 &&
+//rcd->rqID != rq->dataRingQid);
+
+    VmxNet3RxDesc *desc;
+    //vmxnet3_rx_desc *desc;
+    //printf("cmp->qid(%d)",cmp->qid());
+    if (cmp->qid() == rx[Q].id1)
+    {
+        desc = static_cast<VmxNet3RxDesc *>(&dma->rx[Q].desc2[rx[Q].ring1_consumers++]);
+        if (UNLIKELY(rx[Q].ring1_consumers == rx[Q].desc1_size))
+            rx[Q].ring1_consumers=0;
+    }
+    else if (cmp->qid() == rx[Q].id0)
+    {
+        desc = static_cast<VmxNet3RxDesc *>(&dma->rx[Q].desc1[rx[Q].ring0_consumers++]);
+        if (UNLIKELY(rx[Q].ring0_consumers == rx[Q].desc0_size))
+            rx[Q].ring0_consumers=0;
+    }
+    else
+    {
+        //TODO handle data queue?
+        printf("Unknown queue ID \n");
+        assert(0);
+    }
+
+    //int idx=cmp->idx();
+  //  printf("Ring %d idx %d\n",cmp->qid(),cmp->idx());
+  //  printf("Desc len %d desc gen %d\n",desc->len(),desc->gen());
+
+
+    // mask out length TODO read from desc header?
+    int len = cmp->length();// & (VMXNET3_MAX_BUFFER_LEN-1);
     // get buffer and construct packet
-    assert(rx[Q].buffers[desc] != nullptr);
-    recvq.push_back(recv_packet(rx[Q].buffers[desc], len));
-    rx[Q].buffers[desc] = nullptr;
+  //  uint32_t len = desc->flags
+ //   printf("desc %d len %d\n",desc,len);
+    assert(desc->address != 0);
+
+   //TODO if len == 0 recieve and free packet!!
+   recvq.push_back(recv_packet((unsigned char *)desc->address, len));
+   //relq.push_back(*desc);
+
+   desc->address=0;
+   rx[Q].consumers++;
+
+   if (UNLIKELY(rx[Q].consumers == rx[Q].comp_size))
+   {
+       rx[Q].comp_gen =rx[Q].comp_gen^1;
+       rx[Q].consumers=0;
+   }
+
+   if (cmp->qid() == rx[Q].id1)
+   {
+       rx[Q].ring1_unallocated++;
+       if (rx[Q].ring1_unallocated == rx[Q].desc1_size)
+           break;
+   }
+   else
+   {
+
+       rx[Q].ring0_unallocated++;
+       if (rx[Q].ring0_unallocated == rx[Q].desc0_size)
+           break;
+    }
+
+
+
+    cmp=static_cast<VmxNet3_RxComp*>(&rx[Q].comp[rx[Q].consumers]);
   }
-  this->enable_intr(2 + Q);
+
   // refill always
   if (!recvq.empty()) {
+  //  printf("refill packets\n");
     this->refill(rx[Q]);
+     __asm volatile("mfence" ::: "memory");
   }
+
+
+  this->enable_intr(2 + Q);
+
   // handle packets
   for (auto& pckt : recvq) {
+ //   printf("link receive\n");
     Link::receive(std::move(pckt));
   }
   return recvq.empty() == false;
@@ -531,6 +671,7 @@ bool vmxnet3::receive_handler(const int Q)
 
 void vmxnet3::transmit(net::Packet_ptr pckt_ptr)
 {
+//  printf("TRANSMIT PACKET\n");
   while (pckt_ptr != nullptr)
   {
     if (not Nic::sendq_still_available(this->sendq.size())) {

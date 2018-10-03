@@ -1,4 +1,4 @@
-// This file is a part of the IncludeOS unikernel - www.includeos.org
+﻿// This file is a part of the IncludeOS unikernel - www.includeos.org
 //
 // Copyright 2015 Oslo and Akershus University College of Applied Sciences
 // and Alfred Bratterud
@@ -156,6 +156,7 @@ struct vmxnet3_tx_comp {
 /** Transmit completion generation flag */
 #define VMXNET3_TXCF_GEN 0x80000000UL
 
+
 /** Transmit queue control */
 struct vmxnet3_tx_queue_control {
   uint32_t num_deferred;
@@ -205,9 +206,23 @@ struct vmxnet3_rx_desc {
   uint32_t reserved0;
 } __attribute__ (( packed ));
 
+class VmxNet3RxDesc : public vmxnet3_rx_desc
+{
+  public:
+    //TODO make constants
+    void setAddr(uint64_t addr) { address=addr; }
+    void setLength(uint16_t length,uint8_t gen)
+    {
+        flags=(length&0x3FFF) | (gen<<31);
+    }
+    uint64_t addr() { return address; }
+    uint16_t len() { return flags&0x3FFF; }
+    uint16_t gen() { return ((flags>>31)&0x1); }
+};
+
 /** Receive generation flag */
 #define VMXNET3_RXF_GEN 0x80000000UL
-
+#define VMXNET3_RXF_EOP 0x00004000UL
 /** Receive completion descriptor */
 struct vmxnet3_rx_comp {
   /** Descriptor index */
@@ -219,6 +234,24 @@ struct vmxnet3_rx_comp {
   /** Flags */
   uint32_t flags;
 } __attribute__ (( packed ));
+
+
+class VmxNet3_RxComp : public vmxnet3_rx_comp
+{
+public:
+    //these are not endian safe and we could have done bit pattern instead but this is much more fun
+    bool eop() const { return ((index>>14)&0x1) != 0; }
+    bool sop() const { return ((index>>15)&0x1) != 0; }
+    uint8_t gen() const { return ((flags>>31)&0x1); }
+    uint16_t length() { return len&0x3FFF; }
+    uint16_t idx() const { return (index&0xFFF); }
+    uint16_t qid() const { return ((index>>16)&0x7FF); }
+ //  create sane access functions here!!!
+};
+
+static inline uint16_t rx_idx(struct vmxnet3_rx_comp &cmp) { return (cmp.index&0xFFF);}
+static inline uint16_t rx_rqID(struct vmxnet3_rx_comp &cmp) { return ((cmp.index>>16)&0x7FF);}
+static inline uint16_t rx_eop(struct vmxnet3_rx_comp &cmp) { return ((cmp.index>>14)&0x1);}
 
 /** Receive completion generation flag */
 #define VMXNET3_RXCF_GEN 0x80000000UL
