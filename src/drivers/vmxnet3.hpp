@@ -20,6 +20,8 @@
 #include <net/ethernet/ethernet_8021q.hpp>
 #include <deque>
 #include <vector>
+
+
 struct vmxnet3_dma;
 struct vmxnet3_rx_desc;
 struct vmxnet3_rx_comp;
@@ -106,28 +108,66 @@ private:
     uint32_t flushvalue = 0;
   };
 
-
-
-  /*
-  template<class Type,int alignement>
-  class dma_ring
+  template<class T>
+  class RingData
   {
   public:
-      vmxnet3_dma_ring(uint16_t _rid,uint16_t _capacity) { }
-      vmxnet3_rx_desc &get_descriptor(uint16_t idx);
+    //RingData(uint8_t id,uint32_t size,ptr,hwaddr)
+    //TODO move to constructor!!
+    void setSize(uint32_t _size)
+    {
+      size=_size;
+      unallocated=_size;
+    }
+    //void setUnallocated(uint32_t unalloc) { unallocated = unalloc;}
+    void setHWIndex(uint32_t _hwindex) {hwIndex=_hwindex; }
+    void setRingId(uint8_t _id) { id = _id;}
+    void setDesc(T *ptr) { desc=ptr;}
 
+    inline void flip() noexcept
+    {
+      generation=generation^1;
+    }
+    uint32_t gen() const noexcept { return generation; }
+    uint32_t head() const noexcept{ return producers;}
+    inline uint32_t nextHead() noexcept {
+      unallocated--; //remove this and we save some more cycles
+      producers++;
+      if (UNLIKELY(producers == size))
+      {
+         generation^=1;
+         producers=0;
+      }
+      return head();
+    }
+    uint32_t tail() const { return consumers;}
+
+    inline uint32_t nextTail() noexcept {
+      consumers++;
+      if (UNLIKELY(consumers == size))
+          consumers=0;
+      unallocated++;
+
+      return tail();
+    }
+    uint32_t free() const { return unallocated; }
+    bool empty() const { return unallocated == size; }
+
+    T& atTail() { return desc[consumers];}
+    T& atHead() { return desc[producers];}
+
+    uint32_t hwIndex=0;
+    uint32_t size=0;
+    uint8_t id=255;
   private:
-      int rid;
-      u32
-      u8 gen=0;
-      std::unique_ptr<vmxnet3_rx_desc> desc;
-    //  vmxnet3_rx_desc *desc;
-  }
-*/
+    uint32_t producers=0;
+    uint32_t generation=1;
+    uint32_t unallocated=0;
+    uint32_t consumers=0;
+    T *desc=nullptr;
+  };
+
   struct rxring_state {
- //   std::vector<struct vmxnet3_rx_desc *> unallocated;
- //   uint8_t* buffers[NUM_RX_DESC1 + NUM_RX_DESC2];
-   // std::vector<std::pair<int,int>
 
     vmxnet3_rx_desc* desc0 = nullptr;
     vmxnet3_rx_desc* desc1 = nullptr;
@@ -135,21 +175,10 @@ private:
     uint32_t desc0_size = NUM_RX_DESC1;
     uint32_t desc1_size = NUM_RX_DESC2;
     int index = 0;
-    uint32_t ring0_consumers=0;
-    uint32_t ring1_consumers=0;
-    uint32_t ring0_unallocated=NUM_RX_DESC1;
-    uint32_t ring1_unallocated=NUM_RX_DESC2;
-    uint32_t ring0_producers=0;
-    uint32_t ring1_producers=0;
-    uint8_t ring0_gen=1;
-    uint8_t ring1_gen=1;
     uint16_t id0;
     uint16_t id1;
-    uint32_t producers  = 0;
-    uint32_t prod_count = 0;
-    uint32_t consumers  = 0;
-    uint8_t comp_gen=1;
-    uint32_t comp_size=NUM_RX_DESC1+NUM_RX_DESC2;
+    RingData<vmxnet3_rx_desc> rings[2];
+    RingData<vmxnet3_rx_comp> compRing;
   };
 
   void refill(rxring_state&);

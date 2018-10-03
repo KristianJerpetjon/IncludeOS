@@ -541,10 +541,7 @@ bool vmxnet3::receive_handler(const int Q)
     recvq.push_back(recv_packet((unsigned char *)desc.addr(), desc.len()));
 
     compRing.nextHead();
-
- /*   if (ring.empty())
-     break;
-*/
+    
     cmp=static_cast<VmxNet3_RxComp*>(&compRing.atHead());
   }
 
