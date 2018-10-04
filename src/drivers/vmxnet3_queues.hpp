@@ -208,6 +208,7 @@ struct vmxnet3_rx_desc {
 
 class VmxNet3RxDesc : public vmxnet3_rx_desc
 {
+  //static assert that size has not changed
   public:
     //TODO make constants
     void setAddr(uint64_t addr) { address=addr; }
@@ -236,7 +237,7 @@ struct vmxnet3_rx_comp {
 } __attribute__ (( packed ));
 
 
-class VmxNet3_RxComp : public vmxnet3_rx_comp
+class VmxNet3RxComp : public vmxnet3_rx_comp
 {
 public:
     //these are not endian safe and we could have done bit pattern instead but this is much more fun

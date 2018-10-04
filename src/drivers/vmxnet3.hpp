@@ -25,6 +25,8 @@
 struct vmxnet3_dma;
 struct vmxnet3_rx_desc;
 struct vmxnet3_rx_comp;
+class VmxNet3RxDesc;
+class VmxNet3RxComp;
 
 class vmxnet3 : public net::Link_layer<net::Ethernet>
 {
@@ -108,7 +110,7 @@ private:
     uint32_t flushvalue = 0;
   };
 
-  template<class T>
+  template<class T,class DownCast>
   class RingData
   {
   public:
@@ -124,12 +126,9 @@ private:
     void setRingId(uint8_t _id) { id = _id;}
     void setDesc(T *ptr) { desc=ptr;}
 
-    inline void flip() noexcept
-    {
-      generation=generation^1;
-    }
-    uint32_t gen() const noexcept { return generation; }
-    uint32_t head() const noexcept{ return producers;}
+    inline void flip() noexcept { generation=generation^1; }
+    inline uint32_t gen() const noexcept { return generation; }
+    inline uint32_t headCount() const noexcept{ return producers; }
     inline uint32_t nextHead() noexcept {
       unallocated--; //remove this and we save some more cycles
       producers++;
@@ -138,9 +137,9 @@ private:
          generation^=1;
          producers=0;
       }
-      return head();
+      return headCount();
     }
-    uint32_t tail() const { return consumers;}
+
 
     inline uint32_t nextTail() noexcept {
       consumers++;
@@ -153,17 +152,42 @@ private:
     uint32_t free() const { return unallocated; }
     bool empty() const { return unallocated == size; }
 
-    T& atTail() { return desc[consumers];}
-    T& atHead() { return desc[producers];}
+    inline DownCast& atTail() noexcept {
+      return static_cast<DownCast&>(desc[consumers]);
+    }
+    inline DownCast& atHead() noexcept {
+      return static_cast<DownCast&>(desc[producers]);
+    }
+    /**
+     * @brief getHead gets the current head and increments the head counter
+     * @return reference to current head
+     */
+    inline DownCast& getHead() noexcept {
+      uint32_t current=producers;
+      nextHead();
+      return static_cast<DownCast&>(desc[current]);
+    }
+    /**
+     * @brief getTail gets the current tail and increments the tail counter
+     * @return reference to the current tail
+     */
+    inline DownCast&getTail() noexcept {
+      uint32_t current=consumers;
+      nextTail();
+      return static_cast<DownCast&>(desc[current]);
+    }
 
     uint32_t hwIndex=0;
     uint32_t size=0;
     uint8_t id=255;
   private:
+
+    inline uint32_t tail() const noexcept { return consumers; }
     uint32_t producers=0;
     uint32_t generation=1;
     uint32_t unallocated=0;
     uint32_t consumers=0;
+    //TODO use alignas(alignment maybe from template) T desc[size]
     T *desc=nullptr;
   };
 
@@ -177,8 +201,8 @@ private:
     int index = 0;
     uint16_t id0;
     uint16_t id1;
-    RingData<vmxnet3_rx_desc> rings[2];
-    RingData<vmxnet3_rx_comp> compRing;
+    RingData<vmxnet3_rx_desc,VmxNet3RxDesc> rings[2];
+    RingData<vmxnet3_rx_comp,VmxNet3RxComp> compRing;
   };
 
   void refill(rxring_state&);

@@ -381,10 +381,11 @@ void vmxnet3::refill(rxring_state& rxq)
   for (int i = 0 ; i< 2;++i)
   {
     auto &ring=rxq.rings[i];
-    auto head = ring.head();
+    auto head = ring.headCount();
 
     while(ring.free())
     {
+      //bufstore().get_buffers
       if (not Nic::buffers_still_available(bufstore().buffers_in_use()))
       {
         printf("Out of buffers\n");
@@ -393,18 +394,20 @@ void vmxnet3::refill(rxring_state& rxq)
       }
       //auto i = ring.head();
       auto* pkt_data = bufstore().get_buffer();
+
       auto&desc=ring.atHead();
       desc.address=(uintptr_t) &pkt_data[sizeof(net::Packet) + DRIVER_OFFSET];
       desc.flags=max_packet_length | ring.gen()<<31;
-
+     // __asm volatile("mfence" ::: "memory");
       //this increments head beyond current which is what we send in mmio write.. that sounds a bit scary to me..
       ring.nextHead();
     }
 
-    if (head != ring.head())
+    if (head != ring.headCount())
     {
+      __asm volatile("mfence" ::: "memory");
       mmio_write32(this->ptbase + ring.hwIndex + ring.id*8,
-                     ring.head());
+                     ring.headCount());
     }
   }
 }
@@ -521,7 +524,7 @@ bool vmxnet3::receive_handler(const int Q)
   this->disable_intr(2 + Q);
 
   auto &compRing=rx[Q].compRing;
-  auto *cmp = static_cast<VmxNet3_RxComp*>(&compRing.atHead());
+  auto *cmp = &compRing.atHead();
 
   while (compRing.gen() == cmp->gen())
   {
@@ -534,7 +537,7 @@ bool vmxnet3::receive_handler(const int Q)
       rid=1;
 
     auto &ring=rx[Q].rings[rid];
-    auto &desc= static_cast<VmxNet3RxDesc&>(ring.atTail());
+    auto &desc= ring.atTail();
 
     ring.nextTail();
 
@@ -545,7 +548,7 @@ bool vmxnet3::receive_handler(const int Q)
  /*   if (ring.empty())
      break;
 */
-    cmp=static_cast<VmxNet3_RxComp*>(&compRing.atHead());
+    cmp=&compRing.atHead();
   }
 
   // refill always
