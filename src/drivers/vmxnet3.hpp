@@ -205,7 +205,7 @@ private:
     RingData<vmxnet3_rx_comp,VmxNet3RxComp> compRing;
   };
 
-  void refill(rxring_state&);
+  void refill(int receiveQueue);
 
   bool     check_version();
   uint16_t check_link();

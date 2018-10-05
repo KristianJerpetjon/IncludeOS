@@ -288,7 +288,8 @@ vmxnet3::vmxnet3(hw::PCI_Device& d, const uint16_t mtu) :
     rx[q].compRing.setDesc(&rx[q].comp[0]);
     rx[q].compRing.setSize(NUM_RX_DESC1+NUM_RX_DESC2);
 
-    refill(rx[q]);
+    refill(q);
+    // kick ?
   }
 
   // deferred transmit
@@ -374,14 +375,16 @@ void vmxnet3::disable_intr(uint8_t idx) noexcept
 #define VMXNET3_TXF_GEN  0x00004000UL
 
 
-void vmxnet3::refill(rxring_state& rxq)
+void vmxnet3::refill(const int Q)
 {
+//  rxring_state
   static uint32_t max_packet_length=(max_packet_len()&0x3FFF);
+
 
   for (int i = 0 ; i< 2;++i)
   {
-    auto &ring=rxq.rings[i];
-    auto head = ring.headCount();
+    auto &ring=rx[Q].rings[i];
+   // auto head = ring.headCount();
 
     while(ring.free())
     {
@@ -398,14 +401,21 @@ void vmxnet3::refill(rxring_state& rxq)
       auto&desc=ring.atHead();
       desc.address=(uintptr_t) &pkt_data[sizeof(net::Packet) + DRIVER_OFFSET];
       desc.flags=max_packet_length | ring.gen()<<31;
+      __asm volatile("mfence" ::: "memory");
      // __asm volatile("mfence" ::: "memory");
       //this increments head beyond current which is what we send in mmio write.. that sounds a bit scary to me..
       ring.nextHead();
+  //we are writing the read ahead !! TODO exit loop when fill level is n-1 (fix set allocated to size -1 ? )
     }
+//    if (value in shmem...!!)
+    //if
 
-    if (head != ring.headCount())
+    //ok so Q
+    //we need Q !!
+
+    if (UNLIKELY(this->dma->queues.rx[Q].ctrl.update_prod))
     {
-      __asm volatile("mfence" ::: "memory");
+      printf("Kicking\n");
       mmio_write32(this->ptbase + ring.hwIndex + ring.id*8,
                      ring.headCount());
     }
@@ -554,8 +564,8 @@ bool vmxnet3::receive_handler(const int Q)
   // refill always
   if (!recvq.empty()) {
   //  printf("refill packets\n");
-    this->refill(rx[Q]);
-     __asm volatile("mfence" ::: "memory");
+    this->refill(Q);
+     //__asm volatile("mfence" ::: "memory");
   }
 
 
