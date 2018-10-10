@@ -4,9 +4,10 @@
 add_definitions(-DARCH_${ARCH})
 add_definitions(-DARCH="${ARCH}")
 if (smp)
-add_definitions(-DINCLUDEOS_SMP_ENABLE)
+  add_definitions(-DINCLUDEOS_SMP_ENABLE)
 endif()
 
+#TODO move to respecitive sub cmakes ?
 include_directories(${LIBCXX_INCLUDE_DIR})
 include_directories(${MUSL_INCLUDE_DIR})
 include_directories(${SOLO5_INCLUDE_DIR})
@@ -44,18 +45,16 @@ endforeach()
 
 add_library(os STATIC ${SRCS} ${OBJECTS})
 
+#TODO Shouldnt this dependency be set in the service.cmake ?
 add_dependencies(os PrecompiledLibraries botan ${OPENSSL_LIBS})
 
-# disable sanitizers on c_abi and cxx_abi, etc.
-set_source_files_properties(crt/c_abi.c PROPERTIES COMPILE_FLAGS "-fno-sanitize=all")
-set_source_files_properties(crt/cxx_abi.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=all")
 set_source_files_properties(version.cpp PROPERTIES COMPILE_DEFINITIONS "OS_VERSION=\"${OS_VERSION}\"")
 
 add_subdirectory(arch/${ARCH})
 add_subdirectory(platform/x86_pc)
 add_subdirectory(platform/x86_nano)
 if(WITH_SOLO5)
-add_subdirectory(platform/x86_solo5)
+  add_subdirectory(platform/x86_solo5)
 endif(WITH_SOLO5)
 add_subdirectory(drivers)
 add_subdirectory(plugins)

@@ -30,11 +30,11 @@ endif (BUNDLE_LOC)
 
 if (WITH_SOLO5)
 ExternalProject_Add(solo5_repo
-	PREFIX precompiled
-	BUILD_IN_SOURCE 1
+  PREFIX precompiled
+  BUILD_IN_SOURCE 1
 	GIT_REPOSITORY https://github.com/solo5/solo5.git
 	GIT_TAG 285b80aa4da12b628838a78dc79793f4d669ae1b
-	CONFIGURE_COMMAND CC=gcc ./configure.sh
+  CONFIGURE_COMMAND CC=gcc ./configure.sh
 	UPDATE_COMMAND ""
 	BUILD_COMMAND make
 	INSTALL_COMMAND ""

@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.1.0)
 
+project(includeos C CXX)
+
 set(INCLUDEOS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/)
+
+#make all cmake files in IncludeOS/cmake modules
+list(APPEND CMAKE_MODULE_PATH ${INCLUDEOS_ROOT}/cmake)
+
+include(includeos_functions)
 
 # Target CPU Architecture
 if(DEFINED ENV{ARCH})
@@ -9,27 +16,37 @@ else()
   set(ARCH "x86_64" CACHE STRING "Architecture (default)")
 endif()
 
-message(STATUS "Target CPU ${ARCH}")
-
-set(TRIPLE "${ARCH}-pc-linux-elf")
-set(CMAKE_CXX_COMPILER_TARGET ${TRIPLE})
-set(CMAKE_C_COMPILER_TARGET ${TRIPLE})
-
-message(STATUS "Target triple ${TRIPLE}")
+includeos_set_arch(${ARCH})
 
 option(WITH_SOLO5 "Install with solo5 support" ON)
 
-set(CMAKE_TOOLCHAIN_FILE ${INCLUDEOS_ROOT}/cmake/elf-toolchain.cmake)
+if (APPLE)
+    set(CMAKE_TOOLCHAIN_FILE ${INCLUDEOS_ROOT}/cmake/elf-toolchain.cmake)
+endif()
 
-project (includeos C CXX)
+
 
 set(INC ${CMAKE_INSTALL_PREFIX}/includeos/include)
 set(LIB ${CMAKE_INSTALL_PREFIX}/includeos/lib)
 set(BIN ${CMAKE_INSTALL_PREFIX}/includeos/bin)
 set(SCRIPTS ${CMAKE_INSTALL_PREFIX}/includeos/scripts)
 
+# TODO HERE
+#test if binary dir can be created..
+#if not recomend setting CMAKE_INSTALL_PREFIX and or INCLUDEOS_PREFIX to something more sane!!
+#why dont we if ENV(INCLUDEOS_PREFIX) overwrite CMAKE_INSTALL_PREFIX ?
+
 # C++ version
 set(CPP_VERSION c++17)
+
+# Test for c++17
+includeos_test_compiler()
+
+# enforce even more strongly the need for c++17 (uneccesary ?) what to do if cmake is older.. and what does this really do
+if (NOT ${CMAKE_VERSION} VERSION_LESS "3.8")
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 # create OS version string from git describe (used in CXX flags)
 execute_process(COMMAND git describe --tags --dirty
@@ -72,17 +89,12 @@ option(debug "Build with no optimizations" OFF)
 option(minimal "Build for minimal size" OFF)
 option(stripped "reduce size" OFF)
 
-function(init_submodule MOD)
-  message(STATUS "Init git submodule: " ${MOD})
-  execute_process(COMMAND git submodule update --init ${MOD} WORKING_DIRECTORY ${INCLUDEOS_ROOT})
-endfunction()
-
 # Init submodules
-init_submodule(mod/GSL)
-init_submodule(mod/http-parser)
-init_submodule(mod/uzlib)
-init_submodule(mod/rapidjson)
-init_submodule(NaCl)
+includeos_init_submodule(mod/GSL)
+includeos_init_submodule(mod/http-parser)
+includeos_init_submodule(mod/uzlib)
+includeos_init_submodule(mod/rapidjson)
+includeos_init_submodule(NaCl)
 
 # set optimization level
 set(OPTIMIZE "-O2")
@@ -160,13 +172,15 @@ add_subdirectory(src)
 # External projects
 #
 option(vmbuild "Build and install vmbuild and elf_syms" ON)
+
+
+
 if(vmbuild)
   # Install vmbuilder as an external project
   ExternalProject_Add(vmbuild
     PREFIX vmbuild # Build where
-    BUILD_ALWAYS 1
     SOURCE_DIR ${INCLUDEOS_ROOT}/vmbuild # Where is project located
-    BINARY_DIR ${INCLUDEOS_ROOT}/vmbuild/build
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/vmbuild/build
     INSTALL_DIR ${BIN} # Where to install
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
      -DINCLUDE_PATH=${CMAKE_INSTALL_PREFIX} # Pass installation folder
@@ -177,9 +191,8 @@ endif(vmbuild)
 option(diskbuilder "Build and install memdisk helper tool" ON)
 if(diskbuilder)
   ExternalProject_Add(diskbuilder
-    BUILD_ALWAYS 1
     SOURCE_DIR ${INCLUDEOS_ROOT}/diskimagebuild
-    BINARY_DIR ${INCLUDEOS_ROOT}/diskimagebuild/build
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/diskimagebuild/build #make sure its out of tree
     INSTALL_DIR ${BIN}
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
   )
@@ -195,7 +208,7 @@ option(tests "Build unit tests in /test and install lest test framework" OFF)
 option(lest "Install lest unittest headers" OFF)
 
 if (lest OR tests)
-  init_submodule(test/lest)
+  includeos_init_submodule(test/lest)
   install(DIRECTORY test/lest/include/lest DESTINATION ${CMAKE_INSTALL_PREFIX}/includeos/include)
 endif()
 
@@ -204,7 +217,7 @@ if(tests)
   ExternalProject_Add(unittests
     PREFIX unittests
     SOURCE_DIR ${INCLUDEOS_ROOT}/test
-    BINARY_DIR unittests
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/unittests
     CMAKE_ARGS -DINCLUDEOS_ROOT=${INCLUDEOS_ROOT} -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
     )
   #add_subdirectory(test)
@@ -243,7 +256,7 @@ endif()
 
 option(libprotobuf "Build and install Google's protobuf runtime library" ON)
 if(libprotobuf)
-  init_submodule(lib/protobuf)
+  includeos_init_submodule(lib/protobuf)
   include(${INCLUDEOS_ROOT}/cmake/protobuf.cmake)
 endif(libprotobuf)
 
@@ -271,23 +284,10 @@ install(DIRECTORY seed/ DESTINATION includeos/seed)
 
 # Install executable scripts
 install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/boot DESTINATION bin)
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/lxp-run DESTINATION bin)
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/lxp-callgraph DESTINATION bin)
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/lxp-debug DESTINATION bin)
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/lxp-gprof DESTINATION bin)
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/lxp-pgo DESTINATION bin)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux DESTINATION bin)
 
 # Install scripts
-install(PROGRAMS
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/create_bridge.sh
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/create_memdisk.sh
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/grubify.sh
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/qemu-ifup
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/qemu-ifdown
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/qemu_cmd.sh
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/ukvm-ifup.sh
-  ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/run.sh
-  DESTINATION includeos/scripts)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts DESTINATION includeos/scripts)
 
 install(DIRECTORY api/ DESTINATION includeos/api)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/mod/GSL/gsl DESTINATION includeos/include)
