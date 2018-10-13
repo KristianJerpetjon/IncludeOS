@@ -27,4 +27,13 @@ find_package(Git QUIET)
 function(includeos_init_submodule MOD)
   message(STATUS "Init git submodule: " ${MOD})
   execute_process(COMMAND git submodule update --init ${MOD} WORKING_DIRECTORY ${INCLUDEOS_ROOT})
+endfunction(includeos_init_submodule)
+
+function(includeos_os_version OS_VERSION)
+  execute_process(COMMAND git describe --tags --dirty
+            WORKING_DIRECTORY ${INCLUDEOS_ROOT}
+            OUTPUT_VARIABLE OS_VER)
+  string(STRIP ${OS_VER} OS_VER)
+  message(STATUS "OS_VERSION ${OS_VER}")
+  set(OS_VERSION ${OS_VER} PARENT_SCOPE)
 endfunction()

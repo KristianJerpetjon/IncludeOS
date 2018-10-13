@@ -9,6 +9,16 @@ list(APPEND CMAKE_MODULE_PATH ${INCLUDEOS_ROOT}/cmake)
 
 include(includeos_functions)
 
+if ((CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT))
+  if (DEFINED ENV{INCLUDEOS_PREFIX})
+    set(CMAKE_INSTALL_PREFIX $ENV{INCLUDEOS_PREFIX} CACHE PATH "..." FORCE)
+  else()
+    message(WARNING "CMAKE_INSTALL_PREFIX is default did you forget to set INCLUDEOS_PREFIX in your enviroment")
+  endif()
+endif()
+
+message(STATUS "Install Prefix :" ${CMAKE_INSTALL_PREFIX})
+
 # Target CPU Architecture
 if(DEFINED ENV{ARCH})
   set(ARCH "$ENV{ARCH}" CACHE STRING "Architecture")
@@ -49,10 +59,7 @@ if (NOT ${CMAKE_VERSION} VERSION_LESS "3.8")
 endif()
 
 # create OS version string from git describe (used in CXX flags)
-execute_process(COMMAND git describe --tags --dirty
-	        WORKING_DIRECTORY ${INCLUDEOS_ROOT}
-	        OUTPUT_VARIABLE OS_VERSION)
-string(STRIP ${OS_VERSION} OS_VERSION)
+includeos_os_version(OS_VERSION)
 
 option(cpu_feat_vanilla "Restrict use of CPU features to vanilla" ON)
 if(cpu_feat_vanilla)
@@ -173,8 +180,6 @@ add_subdirectory(src)
 #
 option(vmbuild "Build and install vmbuild and elf_syms" ON)
 
-
-
 if(vmbuild)
   # Install vmbuilder as an external project
   ExternalProject_Add(vmbuild
@@ -184,6 +189,8 @@ if(vmbuild)
     INSTALL_DIR ${BIN} # Where to install
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
      -DINCLUDE_PATH=${CMAKE_INSTALL_PREFIX} # Pass installation folder
+     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     DEPENDS PrecompiledLibraries
     )
 endif(vmbuild)
@@ -199,6 +206,7 @@ if(diskbuilder)
 endif(diskbuilder)
 
 option(examples "Build example unikernels in /examples" OFF)
+
 if(examples)
   set(libprotobuf ON) # dependent
   add_subdirectory(examples)
@@ -260,6 +268,7 @@ if(libprotobuf)
   include(${INCLUDEOS_ROOT}/cmake/protobuf.cmake)
 endif(libprotobuf)
 
+
 #
 # Installation
 #
@@ -287,7 +296,7 @@ install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/etc/boot DESTINATION bin)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux DESTINATION bin)
 
 # Install scripts
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts DESTINATION includeos/scripts)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts DESTINATION includeos/)
 
 install(DIRECTORY api/ DESTINATION includeos/api)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/mod/GSL/gsl DESTINATION includeos/include)
