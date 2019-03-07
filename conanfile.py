@@ -1,3 +1,4 @@
+#README to build botan 2.8.0 use conan create (botan/2.8.0@user/channel) path to this file
 import shutil
 
 from conans import ConanFile,tools,CMake
@@ -26,18 +27,17 @@ class IncludeOSConan(ConanFile):
     def requirements(self):
         self.requires("libcxx/[>=5.0]@includeos/test")## do we need this or just headers
         self.requires("GSL/2.0.0@includeos/test")
+        self.requires("libgcc/1.0@includeos/test")
 
         if self.options.basic == 'OFF':
             self.requires("rapidjson/1.1.0@includeos/test")
             self.requires("http-parser/2.8.1@includeos/test") #this one is almost free anyways
             self.requires("uzlib/v2.1.1@includeos/test")
-            self.requires("protobuf/3.5.1.1@includeos/test")
             self.requires("botan/2.8.0@includeos/test")
             self.requires("openssl/1.1.1@includeos/test")
             self.requires("s2n/1.1.1@includeos/test")
 
         #if (self.options.apple):
-            self.requires("libgcc/1.0@includeos/test")
         if (self.options.solo5):
             self.requires("solo5/0.4.1@includeos/test")
     def configure(self):
@@ -52,17 +52,17 @@ class IncludeOSConan(ConanFile):
     def _target_arch(self):
         return {
             "x86":"i686",
-            "x86_64":"x86_64"
+            "x86_64":"x86_64",
+            "armv8" : "aarch64"
         }.get(str(self.settings.arch))
     def _configure_cmake(self):
         cmake = CMake(self)
         #glad True and False also goes but not recursily
-        if (str(self.settings.arch) == "x86"):
-            cmake.definitions['ARCH']="i686"
-        else:
-            cmake.definitions['ARCH']=str(self.settings.arch)
+        cmake.definitions['ARCH']=self._target_arch()
+        
         if (self.options.basic):
             cmake.definitions['CORE_OS']=True
+        
         cmake.definitions['WITH_SOLO5']=self.options.solo5
         cmake.configure(source_folder=self.source_folder+"/includeos")
         return cmake;
@@ -77,13 +77,15 @@ class IncludeOSConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        #this is messy but unless we rethink things its the way to go
-        # this puts os.cmake in the path
+        #to get os.cmake exposed and automagically added when importing conanbuildinfo.cmake
         self.cpp_info.builddirs = ["cmake"]
-        # this ensures that API is searchable
+        
+        #this is messy but unless we rethink things its the way to go
         self.cpp_info.includedirs=['include/os']
+        
         platform='platform'
         #TODO se if this holds up for other arch's
+        
         if (self.settings.arch == "x86" or self.settings.arch == "x86_64"):
             if ( self.options.basic == 'ON'):
                 platform='x86_nano'
