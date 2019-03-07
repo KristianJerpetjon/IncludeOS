@@ -11,7 +11,7 @@ class MicroLBConan(ConanFile):
     generators = 'cmake'
     url = "http://www.includeos.org/"
     version='0.13.0'
-    
+
     default_user="includeos"
     default_channel="test"
 
@@ -24,16 +24,17 @@ class MicroLBConan(ConanFile):
         "tls":True
     }
     def requirements(self):
+        self.requires("includeos/0.14.0@{}/{}".format(self.user,self.channel))
         if (self.options.liveupdate):
             self.requires("liveupdate/{}@{}/{}".format(self.version,self.user,self.channel))
         if (self.options.tls):
             #this will put a dependency requirement on openssl
             self.requires("s2n/1.1.1@{}/{}".format(self.user,self.channel))
 
-    def build_requirements(self):
+    #def build_requirements(self):
         #these are header only so we dont need them down the value chain
-        self.build_requires("rapidjson/1.1.0@{}/{}".format(self.user,self.channel))
-        self.build_requires("GSL/2.0.0@{}/{}".format(self.user,self.channel))
+        #self.build_requires("rapidjson/1.1.0@{}/{}".format(self.user,self.channel))
+        #self.build_requires("GSL/2.0.0@{}/{}".format(self.user,self.channel))
 
     def source(self):
         repo = tools.Git(folder="includeos")
