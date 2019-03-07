@@ -59,6 +59,11 @@ set(CPP_VERSION c++17)
 # create OS version string from git describe (used in CXX flags)
 
 ##extract version header only ONCE avoiding endless rebuild loop ?
+if (CONAN_EXPORTED)
+  FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    "#define OS_VERSION ${CONAN_PACKAGE_VERSION}"
+  )
+else()
 FIND_PACKAGE(Git REQUIRED)
 FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version.h.in
 "#define OS_VERSION \"@VERSION@\"\n"
@@ -82,6 +87,7 @@ add_custom_target(
                        -D DST=${CMAKE_CURRENT_BINARY_DIR}/version.h
                        -P ${CMAKE_CURRENT_BINARY_DIR}/version.cmake
 )
+endif()
 
 include_directories(${CMAKE_BINARY_DIR})
 
@@ -222,7 +228,7 @@ else() # in user space
   conan_cmake_run(
     CONANFILE conan/includeos/conanfile.py
     PROFILE ${CONAN_PROFILE}
-    OPTIONS apple=${APPLE} solo5=${WITH_SOLO5} basic=${CORE_OS}
+    OPTIONS apple=${APPLEa} solo5=${WITH_SOLO5} basic=${CORE_OS}
     BASIC_SETUP
     NO_IMPORTS
   )
@@ -270,8 +276,6 @@ endif(tests)
 set(CMAKE_INSTALL_MESSAGE LAZY) # to avoid spam
 
 # Install cmake files
-install(FILES cmake/pre.service.cmake DESTINATION cmake)
-install(FILES cmake/post.service.cmake DESTINATION cmake)
 install(FILES cmake/linux.service.cmake DESTINATION cmake)
 install(FILES cmake/library.cmake DESTINATION cmake)
 install(FILES cmake/os.cmake DESTINATION cmake)
@@ -308,43 +312,5 @@ install(PROGRAMS
   ${CMAKE_CURRENT_SOURCE_DIR}/etc/scripts/run.sh
   DESTINATION scripts)
 
-#this replicates the install of libraries from bundles using conan
-if(NOT CONAN_EXPORTED)
-  install(CODE
-    "execute_process(COMMAND conan imports -if ${CMAKE_CURRENT_BINARY_DIR} -imf ${CMAKE_INSTALL_PREFIX}/${ARCH} ${CMAKE_CURRENT_SOURCE_DIR}/conan/includeos/conanfile.py)"
-  )
-  #install tools TODO THIS IS A [BUILD_REQUIRES] dependency for the service so should probably go there but for now its here so that things are in the right place
-  install(CODE
-    "execute_process(COMMAND conan install vmbuild/0.13.0@includeos/test -if ${CMAKE_INSTALL_PREFIX})"
-  )
-  install(CODE
-    "execute_process(COMMAND conan install diskimagebuild/0.13.0@includeos/test -if ${CMAKE_INSTALL_PREFIX})"
-  )
-  install(CODE
-    "execute_process(COMMAND conan install nacl/v0.2.0@includeos/test -if ${CMAKE_INSTALL_PREFIX}/tools/)"
-  )
-  if (${ARCH} STREQUAL "x86_64")
-    install(CODE
-      "execute_process(COMMAND conan install chainloader/0.13.0@includeos/test -pr ${CONAN_PROFILE} -s arch=x86 -if ${CMAKE_INSTALL_PREFIX}/)"
-    )
-  endif()
-  if (NOT CORE_OS)
-    install(CODE
-      "execute_process(COMMAND conan install mana/0.13.0@includeos/test -pr ${CONAN_PROFILE} -if ${CMAKE_INSTALL_PREFIX}/${ARCH})"
-    )
-    install(CODE
-      "execute_process(COMMAND conan install mender/0.13.0@includeos/test -pr ${CONAN_PROFILE} -if ${CMAKE_INSTALL_PREFIX}/${ARCH})"
-    )
-    install(CODE
-      "execute_process(COMMAND conan install uplink/0.13.0@includeos/test  -o liveupdate=True -o tls=True -pr ${CONAN_PROFILE} -if ${CMAKE_INSTALL_PREFIX}/${ARCH})"
-    )
-    install(CODE
-      "execute_process(COMMAND conan install microlb/0.13.0@includeos/test -o liveupdate=True -o tls=True -pr ${CONAN_PROFILE} -if ${CMAKE_INSTALL_PREFIX}/${ARCH})"
-    )
-    install(CODE
-      "execute_process(COMMAND conan install liveupdate/0.13.0@includeos/test -pr ${CONAN_PROFILE} -if ${CMAKE_INSTALL_PREFIX}/${ARCH})"
-    )
-  endif()
-endif(NOT CONAN_EXPORTED)
 
 install(DIRECTORY api/ DESTINATION include/os)

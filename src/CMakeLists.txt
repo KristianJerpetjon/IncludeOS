@@ -54,7 +54,9 @@ add_library(os STATIC ${SRCS} ${OBJECTS})
 
 
 if (NOT CMAKE_TESTING_ENABLED)
-  add_dependencies(os version )
+  if(NOT CONAN_EXPORTED)
+    add_dependencies(os version )
+  endif()
   add_subdirectory(arch/${ARCH})
   if (NOT CORE_OS)
 
