@@ -20,10 +20,12 @@ ENTRY(_start)
 
 /*
  * TODO sort out memory location. which is platform specific..
+ * + 0x40000000 to elf start for aarch64 vm..
+ * + 0x02000000 to elf start for rpi3.. ? unsure.. in u-boot..
 **/
 SECTIONS
 {
-  PROVIDE ( _ELF_START_ = . + 0x200000 + 0x40000000);
+  PROVIDE ( _ELF_START_ = . + 0x200000 +0x02000000);
   PROVIDE ( _LOAD_START_ = _ELF_START_); /* For convenience w. multiboot */
   __stack_top = _ELF_START_ -16;
 
@@ -39,7 +41,7 @@ SECTIONS
   PROVIDE( _TEXT_END_ = . );
 
   /* Global offset-table. For dynamic linking */
-  .got ALIGN(0x10) : {
+  .got ALIGN(16) : {
       *(.got*)
   }
 
@@ -129,19 +131,19 @@ SECTIONS
     _RODATA_END_ = .;
   }
 
-  .tdata ALIGN(0x10) :
+  .tdata ALIGN(16) :
   {
     _TDATA_START_ = .;
     *(.tdata .tdata.*)
     _TDATA_END_ = .;
-    . = ALIGN(0x10);
+    . = ALIGN(16);
   }
   .tbss :
   {
     _TBSS_START_ = .;
     *(.tbss .tbss.*)
     _TBSS_END_ = .;
-    . = ALIGN(0x10);
+    . = ALIGN(16);
   }
 
   .memdisk :
@@ -152,11 +154,11 @@ SECTIONS
   }
 
   /* For stack unwinding (exception handling)  */
-  .eh_frame_hdr ALIGN(0x8):
+  .eh_frame_hdr ALIGN(16):
   {
     KEEP(*(.eh_frame_hdr*))
   }
-  .eh_frame ALIGN(0x8):
+  .eh_frame ALIGN(16):
   {
     PROVIDE (__eh_frame_start = .);
     KEEP(*(.eh_frame))
@@ -168,7 +170,7 @@ SECTIONS
     *(.gcc_except_table)
   }
   _READONLY_END_ = .;
-
+  . = ALIGN(16);
   .data :
   {
     _DATA_START_ = .;
@@ -177,7 +179,7 @@ SECTIONS
     *(.gnu.linkonce.d*)
     _DATA_END_ = .;
   }
-
+  . = ALIGN(16);
   .elf_symbols : {
     _ELF_SYM_START_ = .;
     LONG (0);
@@ -193,7 +195,7 @@ SECTIONS
     *(COMMON)
     _BSS_END_ = .;
   }
-  . = ALIGN(0x8);
+  . = ALIGN(16);
 
   _end = .;
 
