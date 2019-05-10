@@ -8,6 +8,7 @@ set(ARCH_OBJECTS
 #  apic_asm.asm
   arch_start.asm
   exceptions.asm
+  page_table.asm
 #  interrupts.asm
 #  fiber.asm
 )
