@@ -3,6 +3,18 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
 
+if (DEFINED ENV{LD})
+  SET(CMAKE_LINKER $ENV{LD})
+endif()
+
+if (DEFINED ENV{OBJCOPY})
+  SET(CMAKE_OBJCOPY $ENV{OBJCOPY})
+endif()
+
+if (DEFINED ENV{STRIP})
+  SET(CMAKE_STRIP $ENV{STRIP})
+endif()
+
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -83,6 +95,7 @@ if ("${ARCH}" STREQUAL "x86_64")
   set(CMAKE_ASM_NASM_OBJECT_FORMAT "elf64")
   set(OBJCOPY_TARGET "elf64-x86-64")
 #  set(CAPABS "${CAPABS} -m64")
+  enable_language(ASM_NASM)
 elseif("${ARCH}" STREQUAL "aarch64")
 
 else()
@@ -90,9 +103,10 @@ else()
   set(CMAKE_ASM_NASM_OBJECT_FORMAT "elf")
   set(OBJCOPY_TARGET "elf32-i386")
 #  set(CAPABS "${CAPABS} -m32")
+  enable_language(ASM_NASM)
 endif()
 
-enable_language(ASM_NASM)
+
 
 set(ELF ${ARCH})
 if (${ELF} STREQUAL "i686")
