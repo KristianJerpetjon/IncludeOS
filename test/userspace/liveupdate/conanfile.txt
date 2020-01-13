@@ -1,0 +1,12 @@
+[requires]
+liveupdate/[>=0.14.0,include_prerelease=True]@includeos/latest
+
+[build_requires]
+diskbuilder/[>=0.14.0,include_prerelease=True]@includeos/latest
+
+[options]
+liveupdate:platform=userspace
+
+[generators]
+virtualenv
+cmake
